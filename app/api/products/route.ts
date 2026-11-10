@@ -1,8 +1,12 @@
 import {
   InvalidProductInputError,
+  ProductNotFoundError,
   getProductsService,
+  deleteProductService,
   registerProductService,
+  updateProductService,
 } from "@/lib/services/productService";
+import { NextResponse } from "next/server";
 
 export async function GET() {
   try {
@@ -14,6 +18,77 @@ export async function GET() {
       { message: "商品一覧を取得できませんでした。" },
       { status: 500 },
     );
+  }
+}
+
+export async function PATCH(request: Request) {
+  let input: unknown;
+  try {
+    input = await request.json();
+  } catch {
+    return NextResponse.json(
+      { message: "JSONの形式が正しくありません。" },
+      { status: 400 },
+    );
+  }
+
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return NextResponse.json(
+      { message: "入力内容が正しくありません。" },
+      { status: 400 },
+    );
+  }
+
+  const { id, name, price } = input as Record<string, unknown>;
+  try {
+    const product = await updateProductService(id, { name, price });
+    return NextResponse.json(product);
+  } catch (error) {
+    if (error instanceof InvalidProductInputError) {
+      return NextResponse.json(
+        { message: error.message },
+        { status: 400 }
+      );
+    }
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json(
+        { message: error.message },
+        { status: 404 }
+      );
+    }
+    console.error("Failed to update product:", error);
+    return NextResponse.json(
+      { message: "商品を更新できませんでした。" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(request: Request) {
+  let input: unknown;
+  try {
+    input = await request.json();
+  } catch {
+    return NextResponse.json({ message: "JSONの形式が正しくありません。" }, { status: 400 });
+  }
+
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    return NextResponse.json({ message: "入力内容が正しくありません。" }, { status: 400 });
+  }
+
+  const { id } = input as Record<string, unknown>;
+  try {
+    const product = await deleteProductService(id);
+    return NextResponse.json(product);
+  } catch (error) {
+    if (error instanceof InvalidProductInputError) {
+      return NextResponse.json({ message: error.message }, { status: 400 });
+    }
+    if (error instanceof ProductNotFoundError) {
+      return NextResponse.json({ message: error.message }, { status: 404 });
+    }
+    console.error("Failed to delete product:", error);
+    return NextResponse.json({ message: "商品を削除できませんでした。" }, { status: 500 });
   }
 }
 

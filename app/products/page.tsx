@@ -1,9 +1,7 @@
-// 登録された商品一覧を表示するページ
-
 "use client";
 
 import { useEffect, useState } from "react";
-
+// typeは自分で名前を付けた型を定義できる
 type Product = {
   id: number;
   name: string;
@@ -11,20 +9,26 @@ type Product = {
   stock: number;
 };
 
+type ApiError = { message?: string };
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editError, setEditError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     async function loadProducts() {
       try {
         const response = await fetch("/api/products");
-        const result = (await response.json()) as
-          | Product[]
-          | { message?: string };
-
-        if (!response.ok) {
+        const result = (await response.json()) as Product[] | ApiError;
+        if (!response.ok || !Array.isArray(result)) {
           setError(
             !Array.isArray(result) && result.message
               ? result.message
@@ -32,19 +36,91 @@ export default function ProductsPage() {
           );
           return;
         }
-
-        setProducts(result as Product[]);
+        setProducts(result);
       } catch {
         setError("通信に失敗しました。時間をおいて再度お試しください。");
       } finally {
         setIsLoading(false);
       }
     }
-    // voidは式の評価結果をundefinedにする演算子
-    // 関数自体の動作には影響しない
-    // 今回は戻り値のPromiseを使わないことを明示している
+
     void loadProducts();
   }, []);
+
+  function startEditing(product: Product) {
+    setEditingProductId(product.id);
+    setEditName(product.name);
+    setEditPrice(String(product.price));
+    setEditError("");
+  }
+
+  async function saveProduct() {
+    if (editingProductId === null) return;
+
+    setIsSaving(true);
+    setEditError("");
+    try {
+      const response = await fetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingProductId,
+          name: editName,
+          price: editPrice.trim() === "" ? null : Number(editPrice),
+        }),
+      });
+      const result = (await response.json()) as Product | ApiError;
+      if (!response.ok) {
+        setEditError(
+          "message" in result && result.message
+            ? result.message
+            : "商品を更新できませんでした。",
+        );
+        return;
+      }
+
+      const updatedProduct = result as Product;
+      // 現在のStateをcurrentで受け取り、mapで更新した配列を返してproductsを更新する
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === updatedProduct.id ? updatedProduct : product,
+        ),
+      );
+      setEditingProductId(null);
+    } catch {
+      setEditError("通信に失敗しました。時間をおいて再度お試しください。");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteProduct(product: Product) {
+    if (!window.confirm(`「${product.name}」を削除しますか？`)) return;
+
+    setDeletingProductId(product.id);
+    setDeleteError("");
+    try {
+      const response = await fetch("/api/products", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: product.id }),
+      });
+      const result = (await response.json()) as Product | ApiError;
+      if (!response.ok) {
+        setDeleteError(
+          "message" in result && result.message
+            ? result.message
+            : "商品を削除できませんでした。",
+        );
+        return;
+      }
+      setProducts((current) => current.filter((item) => item.id !== product.id));
+    } catch {
+      setDeleteError("通信に失敗しました。時間をおいて再度お試しください。");
+    } finally {
+      setDeletingProductId(null);
+    }
+  }
 
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-12 text-zinc-900">
@@ -68,19 +144,96 @@ export default function ProductsPage() {
                   <th scope="col" className="px-4 py-3 font-medium">商品名</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">価格</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">在庫数</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
                 {products.map((product) => (
                   <tr key={product.id} className="border-b border-zinc-100 last:border-0">
                     <td className="px-4 py-3">{product.id}</td>
-                    <td className="px-4 py-3">{product.name}</td>
-                    <td className="px-4 py-3 text-right">{product.price.toLocaleString("ja-JP")}</td>
-                    <td className="px-4 py-3 text-right">{product.stock.toLocaleString("ja-JP")}</td>
+                    {editingProductId === product.id ? (
+                      <>
+                        <td className="px-4 py-3">
+                          <label className="sr-only" htmlFor={`name-${product.id}`}>商品名</label>
+                          <input
+                            id={`name-${product.id}`}
+                            className="w-full rounded-md border border-zinc-300 px-2 py-1"
+                            value={editName}
+                            onChange={(event) => setEditName(event.target.value)}
+                          />
+                        </td>
+                        <td className="px-4 py-3">
+                          <label className="sr-only" htmlFor={`price-${product.id}`}>価格</label>
+                          <input
+                            id={`price-${product.id}`}
+                            type="number"
+                            min="0"
+                            step="1"
+                            className="w-full rounded-md border border-zinc-300 px-2 py-1 text-right"
+                            value={editPrice}
+                            onChange={(event) => setEditPrice(event.target.value)}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-right">{product.stock.toLocaleString("ja-JP")}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              className="rounded-md bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+                              onClick={() => void saveProduct()}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? "保存中..." : "保存"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-md border border-zinc-300 px-3 py-1"
+                              onClick={() => setEditingProductId(null)}
+                              disabled={isSaving}
+                            >
+                              キャンセル
+                            </button>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-4 py-3">{product.name}</td>
+                        <td className="px-4 py-3 text-right">{product.price.toLocaleString("ja-JP")}</td>
+                        <td className="px-4 py-3 text-right">{product.stock.toLocaleString("ja-JP")}</td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50"
+                            onClick={() => startEditing(product)}
+                          >
+                            編集
+                          </button>
+                          <button
+                            type="button"
+                            className="ml-2 rounded-md border border-red-300 px-3 py-1 text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            onClick={() => void deleteProduct(product)}
+                            disabled={deletingProductId !== null}
+                          >
+                            {deletingProductId === product.id ? "削除中..." : "削除"}
+                          </button>
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
+            {editError && (
+              <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {editError}
+              </p>
+            )}
+            {deleteError && (
+              <p role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {deleteError}
+              </p>
+            )}
           </div>
         )}
       </section>

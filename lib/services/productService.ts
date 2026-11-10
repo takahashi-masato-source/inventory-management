@@ -1,6 +1,9 @@
 import {
   createProductRepository,
+  findProductForEditRepository,
   findProductsRepository,
+  softDeleteProductRepository,
+  updateProductRepository,
 } from "@/lib/repositories/productRepository";
 // classはオブジェクトを作るための設計図を定義する命令
 // classは設計図のようなものであり、new クラス名()で個別に複数のオブジェクトを作れる
@@ -55,4 +58,51 @@ export async function registerProductService(input: unknown) {
 
 export async function getProductsService() {
   return findProductsRepository();
+}
+
+export class ProductNotFoundError extends Error {
+  constructor() {
+    super("商品が見つからないか、編集できません。");
+    this.name = "ProductNotFoundError";
+  }
+}
+
+export async function updateProductService(
+  id: unknown,
+  input: unknown,
+) {
+  if (typeof id !== "number" || !Number.isInteger(id) || id <= 0) {
+    throw new InvalidProductInputError("商品IDが正しくありません。");
+  }
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new InvalidProductInputError("入力内容が正しくありません。");
+  }
+
+  const { name, price } = input as Record<"name" | "price", unknown>;
+  if (typeof name !== "string" || name.trim().length === 0) {
+    throw new InvalidProductInputError("商品名を入力してください。");
+  }
+  if (typeof price !== "number" || !Number.isInteger(price) || price < 0) {
+    throw new InvalidProductInputError("価格は0以上の整数で入力してください。");
+  }
+
+  const product = await findProductForEditRepository(id);
+  if (!product || product.isDeleted) {
+    throw new ProductNotFoundError();
+  }
+
+  return updateProductRepository(id, { name: name.trim(), price });
+}
+
+export async function deleteProductService(id: unknown) {
+  if (typeof id !== "number" || !Number.isInteger(id) || id <= 0) {
+    throw new InvalidProductInputError("商品IDが正しくありません。");
+  }
+
+  const product = await findProductForEditRepository(id);
+  if (!product || product.isDeleted) {
+    throw new ProductNotFoundError();
+  }
+
+  return softDeleteProductRepository(id);
 }

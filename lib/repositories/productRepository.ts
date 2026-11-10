@@ -23,3 +23,27 @@ export function findProductsRepository() {
     orderBy: { id: "asc" },
   });
 }
+
+export function findProductForEditRepository(id: number) {
+  return prisma.product.findUnique({
+    where: { id },
+    select: { id: true, isDeleted: true },
+  });
+}
+
+export function updateProductRepository(
+  id: number,
+  data: { name: string; price: number },
+) {
+  return prisma.product.update({
+    where: { id },
+    data,
+  });
+}
+
+export function softDeleteProductRepository(id: number) {
+  return prisma.product.update({
+    where: { id },
+    data: { isDeleted: true },
+  });
+}

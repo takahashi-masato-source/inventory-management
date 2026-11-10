@@ -39,9 +39,14 @@ export async function PATCH(request: Request) {
     );
   }
 
-  const { id, name, price } = input as Record<string, unknown>;
+  const updateInput = input as Record<string, unknown>;
+  const { id, name, price, categoryId } = updateInput;
   try {
-    const product = await updateProductService(id, { name, price });
+    const product = await updateProductService(id, {
+      name,
+      price,
+      ...(Object.prototype.hasOwnProperty.call(updateInput, "categoryId") ? { categoryId } : {}),
+    });
     return NextResponse.json(product);
   } catch (error) {
     if (error instanceof InvalidProductInputError) {
@@ -54,6 +59,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         { message: error.message },
         { status: 404 }
+      );
+    }
+    if (
+      typeof error === "object" && error !== null &&
+      "code" in error && error.code === "P2003"
+    ) {
+      return NextResponse.json(
+        { message: "選択したカテゴリーが見つかりません。" },
+        { status: 400 },
       );
     }
     console.error("Failed to update product:", error);
@@ -125,6 +139,17 @@ export async function POST(request: Request) {
       );
     }
     //console.log()のエラー用の出力
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "P2003"
+    ) {
+      return Response.json(
+        { message: "選択したカテゴリーが見つかりません。" },
+        { status: 400 },
+      );
+    }
     console.error("Failed to register product:", error);
     return Response.json(
       { message: "商品を登録できませんでした。" },

@@ -7,8 +7,11 @@ type Product = {
   name: string;
   price: number;
   stock: number;
+  categoryId: number | null;
+  category: { name: string } | null;
 };
 
+type Category = { id: number; name: string };
 type ApiError = { message?: string };
 
 export default function ProductsPage() {
@@ -18,6 +21,9 @@ export default function ProductsPage() {
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [editError, setEditError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProductId, setDeletingProductId] = useState<number | null>(null);
@@ -47,11 +53,30 @@ export default function ProductsPage() {
     void loadProducts();
   }, []);
 
-  function startEditing(product: Product) {
-    setEditingProductId(product.id);
-    setEditName(product.name);
-    setEditPrice(String(product.price));
+  async function startEditing(product: Product) {
+    setIsLoadingCategories(true);
     setEditError("");
+    try {
+      const response = await fetch("/api/categories");
+      const result = (await response.json()) as Category[] | ApiError;
+      if (!response.ok || !Array.isArray(result)) {
+        setEditError(
+          !Array.isArray(result) && result.message
+            ? result.message
+            : "カテゴリー一覧を取得できませんでした。",
+        );
+        return;
+      }
+      setCategories(result);
+      setEditCategoryId(product.categoryId === null ? "" : String(product.categoryId));
+      setEditingProductId(product.id);
+      setEditName(product.name);
+      setEditPrice(String(product.price));
+    } catch {
+      setEditError("カテゴリー一覧を取得できませんでした。");
+    } finally {
+      setIsLoadingCategories(false);
+    }
   }
 
   async function saveProduct() {
@@ -67,6 +92,7 @@ export default function ProductsPage() {
           id: editingProductId,
           name: editName,
           price: editPrice.trim() === "" ? null : Number(editPrice),
+          categoryId: editCategoryId === "" ? null : Number(editCategoryId),
         }),
       });
       const result = (await response.json()) as Product | ApiError;
@@ -79,11 +105,18 @@ export default function ProductsPage() {
         return;
       }
 
-      const updatedProduct = result as Product;
+      const updatedProduct = result as Omit<Product, "category">;
+      const selectedCategory = categories.find(
+        (category) => String(category.id) === editCategoryId,
+      );
+      const productWithCategory: Product = {
+        ...updatedProduct,
+        category: selectedCategory ? { name: selectedCategory.name } : null,
+      };
       // 現在のStateをcurrentで受け取り、mapで更新した配列を返してproductsを更新する
       setProducts((current) =>
         current.map((product) =>
-          product.id === updatedProduct.id ? updatedProduct : product,
+          product.id === productWithCategory.id ? productWithCategory : product,
         ),
       );
       setEditingProductId(null);
@@ -144,6 +177,7 @@ export default function ProductsPage() {
                   <th scope="col" className="px-4 py-3 font-medium">商品名</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">価格</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">在庫数</th>
+                  <th scope="col" className="px-4 py-3 font-medium">カテゴリー</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">操作</th>
                 </tr>
               </thead>
@@ -161,6 +195,19 @@ export default function ProductsPage() {
                             value={editName}
                             onChange={(event) => setEditName(event.target.value)}
                           />
+                          <label className="sr-only" htmlFor={`category-${product.id}`}>カテゴリー</label>
+                          <select
+                            id={`category-${product.id}`}
+                            className="mt-2 w-full rounded-md border border-zinc-300 px-2 py-1"
+                            value={editCategoryId}
+                            onChange={(event) => setEditCategoryId(event.target.value)}
+                            disabled={isLoadingCategories || isSaving}
+                          >
+                            <option value="">カテゴリー未設定</option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>{category.name}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-4 py-3">
                           <label className="sr-only" htmlFor={`price-${product.id}`}>価格</label>
@@ -175,13 +222,14 @@ export default function ProductsPage() {
                           />
                         </td>
                         <td className="px-4 py-3 text-right">{product.stock.toLocaleString("ja-JP")}</td>
+                        <td className="px-4 py-3">{product.category?.name ?? "未設定"}</td>
                         <td className="px-4 py-3 text-right">
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
                               className="rounded-md bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
                               onClick={() => void saveProduct()}
-                              disabled={isSaving}
+                              disabled={isSaving || isLoadingCategories || Boolean(editError)}
                             >
                               {isSaving ? "保存中..." : "保存"}
                             </button>
@@ -201,11 +249,13 @@ export default function ProductsPage() {
                         <td className="px-4 py-3">{product.name}</td>
                         <td className="px-4 py-3 text-right">{product.price.toLocaleString("ja-JP")}</td>
                         <td className="px-4 py-3 text-right">{product.stock.toLocaleString("ja-JP")}</td>
+                        <td className="px-4 py-3">{product.category?.name ?? "未設定"}</td>
                         <td className="px-4 py-3 text-right">
                           <button
                             type="button"
                             className="rounded-md border border-zinc-300 px-3 py-1 hover:bg-zinc-50"
-                            onClick={() => startEditing(product)}
+                              onClick={() => void startEditing(product)}
+                              disabled={isLoadingCategories}
                           >
                             編集
                           </button>

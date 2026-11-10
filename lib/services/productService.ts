@@ -1,5 +1,6 @@
 import {
   createProductRepository,
+  findCategoryForProductRepository,
   findProductForEditRepository,
   findProductsRepository,
   softDeleteProductRepository,
@@ -39,7 +40,8 @@ export async function registerProductService(input: unknown) {
   // ただし、実際に存在するかどうかは保証されない
   // キーの型をstringにすれば、任意の文字列のプロパティ名を扱える　
   // (例)const { name, price } = input as Record<string, unknown>;
-  const { name, price } = input as Record<"name" | "price", unknown>;
+  const { name, price, categoryId: rawCategoryId } = input as Record<string, unknown>;
+  const categoryId = rawCategoryId === undefined ? null : rawCategoryId;
 
   if (typeof name !== "string" || name.trim().length === 0) {
     throw new InvalidProductInputError("商品名を入力してください。");
@@ -50,9 +52,17 @@ export async function registerProductService(input: unknown) {
     throw new InvalidProductInputError("価格は0以上の整数で入力してください。");
   }
 
-  return createProductRepository({ 
+  if (categoryId !== null && (typeof categoryId !== "number" || !Number.isInteger(categoryId) || categoryId <= 0)) {
+    throw new InvalidProductInputError("カテゴリーを正しく選択してください。");
+  }
+  if (categoryId !== null && !(await findCategoryForProductRepository(categoryId))) {
+    throw new InvalidProductInputError("選択したカテゴリーが見つかりません。");
+  }
+
+  return createProductRepository({
     name: name.trim(),
-    price 
+    price,
+    categoryId,
   });
 }
 
@@ -78,7 +88,8 @@ export async function updateProductService(
     throw new InvalidProductInputError("入力内容が正しくありません。");
   }
 
-  const { name, price } = input as Record<"name" | "price", unknown>;
+  const updateInput = input as Record<string, unknown>;
+  const { name, price, categoryId } = updateInput;
   if (typeof name !== "string" || name.trim().length === 0) {
     throw new InvalidProductInputError("商品名を入力してください。");
   }
@@ -91,7 +102,21 @@ export async function updateProductService(
     throw new ProductNotFoundError();
   }
 
-  return updateProductRepository(id, { name: name.trim(), price });
+  const hasCategoryId = Object.prototype.hasOwnProperty.call(updateInput, "categoryId");
+  if (hasCategoryId && categoryId !== null &&
+    (typeof categoryId !== "number" || !Number.isInteger(categoryId) || categoryId <= 0)) {
+    throw new InvalidProductInputError("カテゴリーを正しく選択してください。");
+  }
+  if (hasCategoryId && typeof categoryId === "number" &&
+    !(await findCategoryForProductRepository(categoryId))) {
+    throw new InvalidProductInputError("選択したカテゴリーが見つかりません。");
+  }
+
+  return updateProductRepository(id, {
+    name: name.trim(),
+    price,
+    ...(hasCategoryId ? { categoryId: categoryId as number | null } : {}),
+  });
 }
 
 export async function deleteProductService(id: unknown) {

@@ -4,10 +4,17 @@ import { prisma } from "@/app/lib/prisma";
 // awaitはPromiseの完了まで、その非同期関数の後続処理を一時停止する
 // asyncは関数内でawaitを使えるようにし、その関数の返り値をPromiseにする
 export function createProductRepository(
-  data: { name: string; price: number }
+  data: { name: string; price: number; categoryId: number | null }
 ) {
   return prisma.product.create({
     data,
+  });
+}
+
+export function findCategoryForProductRepository(id: number) {
+  return prisma.category.findUnique({
+    where: { id },
+    select: { id: true },
   });
 }
 
@@ -19,6 +26,8 @@ export function findProductsRepository() {
       name: true,
       price: true,
       stock: true,
+      categoryId: true,
+      category: { select: { name: true } },
     },
     orderBy: { id: "asc" },
   });
@@ -33,7 +42,7 @@ export function findProductForEditRepository(id: number) {
 
 export function updateProductRepository(
   id: number,
-  data: { name: string; price: number },
+  data: { name: string; price: number; categoryId?: number | null },
 ) {
   return prisma.product.update({
     where: { id },

@@ -7,6 +7,7 @@ export default function Home(){
       <div className="flex flex-col">
         <Link href={"/products/new"}>商品名と価格を入力する画面</Link>
         <Link href={"/products"}>商品一覧表示</Link>
+        <Link href={"/categories/new"}>カテゴリー登録画面</Link>
       </div>
     </main>
   )
